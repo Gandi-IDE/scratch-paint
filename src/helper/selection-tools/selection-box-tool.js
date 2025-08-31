@@ -3,7 +3,7 @@ import {getHitBounds} from '../../helper/bitmap';
 import {rectSelect} from '../guides';
 import {getRaster} from '../layer';
 import {clearSelection, processRectangularSelection} from '../selection';
-import {BASE} from '../view';
+import {BASE, isInfiniteCanvasEnabled} from '../view';
 
 /** Tool to handle drag selection. A dotted line box appears and everything enclosed is selected. */
 class SelectionBoxTool {
@@ -46,14 +46,28 @@ class SelectionBoxTool {
     onMouseUpBitmap (event) {
         if (event.event.button > 0) return; // only first mouse button
         if (this.selectionRect) {
-            let rect = new paper.Rectangle({
-                from: new paper.Point(
-                    Math.max(0, Math.round(this.selectionRect.bounds.topLeft.x)),
-                    Math.max(0, Math.round(this.selectionRect.bounds.topLeft.y))),
-                to: new paper.Point(
-                    Math.min(BASE.ART_BOARD_WIDTH, Math.round(this.selectionRect.bounds.bottomRight.x)),
-                    Math.min(BASE.ART_BOARD_HEIGHT, Math.round(this.selectionRect.bounds.bottomRight.y)))
-            });
+            let rect;
+            if (isInfiniteCanvasEnabled()) {
+                // In infinite canvas mode, don't limit selection to art board bounds
+                const rasterBounds = getRaster().bounds;
+                rect = new paper.Rectangle({
+                    from: new paper.Point(
+                        Math.max(rasterBounds.left, Math.round(this.selectionRect.bounds.topLeft.x)),
+                        Math.max(rasterBounds.top, Math.round(this.selectionRect.bounds.topLeft.y))),
+                    to: new paper.Point(
+                        Math.min(rasterBounds.right, Math.round(this.selectionRect.bounds.bottomRight.x)),
+                        Math.min(rasterBounds.bottom, Math.round(this.selectionRect.bounds.bottomRight.y)))
+                });
+            } else {
+                rect = new paper.Rectangle({
+                    from: new paper.Point(
+                        Math.max(0, Math.round(this.selectionRect.bounds.topLeft.x)),
+                        Math.max(0, Math.round(this.selectionRect.bounds.topLeft.y))),
+                    to: new paper.Point(
+                        Math.min(BASE.ART_BOARD_WIDTH, Math.round(this.selectionRect.bounds.bottomRight.x)),
+                        Math.min(BASE.ART_BOARD_HEIGHT, Math.round(this.selectionRect.bounds.bottomRight.y)))
+                });
+            }
 
             // Trim/tighten selection bounds inwards to only the opaque region, excluding transparent pixels
             rect = getHitBounds(getRaster(), rect);

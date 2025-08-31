@@ -9,7 +9,7 @@ import {ensureClockwise, scaleWithStrokes} from '../helper/math';
 import {performSnapshot} from '../helper/undo';
 import {
     BASE,
-    clampViewBounds, resetZoom, resizeCrosshair, setWorkspaceBounds, zoomToFit
+    clampViewBounds, resetZoom, resizeCrosshair, setWorkspaceBounds, zoomToFit, isInfiniteCanvasEnabled
 } from '../helper/view';
 import Formats from '../lib/format';
 import log from '../log/log';
@@ -21,6 +21,7 @@ import {clearUndoState, undoSnapshot} from '../reducers/undo';
 import {updateViewBounds} from '../reducers/view-bounds';
 import {saveZoomLevel, setZoomLevelId} from '../reducers/zoom-levels';
 import styles from './paper-canvas.css';
+import {setupInfiniteBackgroundUpdates, forceUpdateInfiniteBackground, watchInfiniteCanvasModeToggle, stopWatchingInfiniteCanvasModeToggle} from '../helper/dynamic-background';
 
 
 class PaperCanvas extends React.Component {
@@ -65,6 +66,12 @@ class PaperCanvas extends React.Component {
         updateTheme(this.props.theme);
         this.importImage(
             this.props.imageFormat, this.props.image, this.props.rotationCenterX, this.props.rotationCenterY);
+        if (isInfiniteCanvasEnabled()) {
+            setupInfiniteBackgroundUpdates();
+            forceUpdateInfiniteBackground();
+        }
+        // Start watching for infinite mode toggle and rebuild background when changed
+        watchInfiniteCanvasModeToggle(() => this.props.format);
     }
     componentWillReceiveProps (newProps) {
         if (this.props.imageId !== newProps.imageId) {
@@ -86,6 +93,8 @@ class PaperCanvas extends React.Component {
         if (!this.shouldZoomToFit) {
             this.props.saveZoomLevel();
         }
+        // Stop mode watcher to avoid leaks
+        stopWatchingInfiniteCanvasModeToggle();
         paper.remove();
     }
     clearQueuedImport () {
@@ -141,11 +150,14 @@ class PaperCanvas extends React.Component {
             // import bitmap
             this.props.changeFormat(Formats.BITMAP_SKIP_CONVERT);
 
-            const mask = new paper.Shape.Rectangle(getRaster().getBounds());
-            mask.guide = true;
-            mask.locked = true;
-            mask.setPosition(BASE.CENTER);
-            mask.clipMask = true;
+            // Only create mask in non-infinite canvas mode
+            if (!isInfiniteCanvasEnabled()) {
+                const mask = new paper.Shape.Rectangle(getRaster().getBounds());
+                mask.guide = true;
+                mask.locked = true;
+                mask.setPosition(BASE.CENTER);
+                mask.clipMask = true;
+            }
 
             const imgElement = new Image();
             this.queuedImageToLoad = imgElement;
@@ -265,12 +277,19 @@ class PaperCanvas extends React.Component {
         mask.guide = true;
         mask.locked = true;
         mask.matrix = new paper.Matrix(); // Identity
-        // Set the artwork to get clipped at the max costume size
-        mask.size.height = BASE.MAX_WORKSPACE_BOUNDS.height;
-        mask.size.width = BASE.MAX_WORKSPACE_BOUNDS.width;
-        mask.setPosition(BASE.CENTER);
-        paper.project.activeLayer.addChild(mask);
-        mask.clipMask = true;
+        
+        // In infinite canvas mode, don't apply clipping mask
+        if (!isInfiniteCanvasEnabled()) {
+            // Set the artwork to get clipped at the max costume size
+            mask.size.height = BASE.MAX_WORKSPACE_BOUNDS.height;
+            mask.size.width = BASE.MAX_WORKSPACE_BOUNDS.width;
+            mask.setPosition(BASE.CENTER);
+            paper.project.activeLayer.addChild(mask);
+            mask.clipMask = true;
+        } else {
+            // In infinite canvas mode, remove the mask to avoid clipping
+            mask.remove();
+        }
 
         // Reduce single item nested in groups
         if (item instanceof paper.Group && item.children.length === 1) {

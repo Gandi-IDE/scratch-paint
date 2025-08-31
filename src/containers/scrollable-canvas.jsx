@@ -8,6 +8,7 @@ import ScrollableCanvasComponent from '../components/scrollable-canvas/scrollabl
 import {clampViewBounds, pan, zoomOnFixedPoint, getWorkspaceBounds} from '../helper/view';
 import {updateViewBounds} from '../reducers/view-bounds';
 import {redrawSelectionBox} from '../reducers/selected-items';
+import {updateInfiniteBackgroundThrottled} from '../helper/dynamic-background';
 
 import {getEventXY} from '../lib/touch-utils';
 import bindAll from 'lodash.bindall';
@@ -68,6 +69,7 @@ class ScrollableCanvas extends React.Component {
         paper.view.matrix.tx = this.initialScreenX - (this.initialMouseX - x);
         clampViewBounds();
         this.props.updateViewBounds(paper.view.matrix);
+        updateInfiniteBackgroundThrottled(); // Update background on pan
         if (this.props.canvas) {
             this.props.canvas.style.cursor = 'move';
         }
@@ -147,6 +149,7 @@ class ScrollableCanvas extends React.Component {
             zoomOnFixedPoint(-deltaY / 500, fixedPoint);
             this.props.updateViewBounds(paper.view.matrix);
             this.props.redrawSelectionBox(); // Selection handles need to be resized after zoom
+            updateInfiniteBackgroundThrottled();
         } else if (event.shiftKey && event.deltaX === 0) {
             // Scroll horizontally (based on vertical scroll delta)
             // This is needed as for some browser/system combinations which do not set deltaX.
@@ -154,11 +157,13 @@ class ScrollableCanvas extends React.Component {
             const dx = deltaY / paper.view.zoom;
             pan(dx, 0);
             this.props.updateViewBounds(paper.view.matrix);
+            updateInfiniteBackgroundThrottled();
         } else {
             const dx = deltaX / paper.view.zoom;
             const dy = deltaY / paper.view.zoom;
             pan(dx, dy);
             this.props.updateViewBounds(paper.view.matrix);
+            updateInfiniteBackgroundThrottled();
             if (paper.tool) {
                 paper.tool.view._handleMouseEvent('mousemove', event, fixedPoint);
             }

@@ -5,6 +5,12 @@ import {getHitBounds} from './bitmap';
 import {CROSSHAIR_SIZE, getBackgroundGuideLayer, getDragCrosshairLayer, getRaster} from './layer';
 import {getAllRootItems, getSelectedRootItems} from './selection';
 
+// Check for infinite canvas mode via global variable
+// If window.scratchPaintInfiniteCanvas is true, enable infinite canvas mode
+// Otherwise, use the original bounded workspace behavior
+const isInfiniteCanvasEnabled = () => {
+    return typeof window !== 'undefined' && window.scratchPaintInfiniteCanvas === true;
+};
 
 const PADDING_PERCENT = 25; // Padding as a percent of the max of width/height of the sprite
 const BUFFER = 50; // Number of pixels of allowance around objects at the edges of the workspace
@@ -50,7 +56,29 @@ const getWorkspaceBounds = () => _workspaceBounds;
 */
 const setWorkspaceBounds = clipEmpty => {
     const items = getAllRootItems();
-    // Include the artboard and what's visible in the viewport
+    
+    if (isInfiniteCanvasEnabled()) {
+        // In infinite canvas mode, workspace bounds are dynamically calculated
+        // based on current view and content, without any fixed limits
+        let bounds = paper.view.bounds;
+        
+        // Include all drawn items with a reasonable buffer
+        for (const item of items) {
+            bounds = bounds.unite(item.bounds.expand(BUFFER));
+        }
+        
+        // Ensure minimum size includes the artboard
+        bounds = bounds.unite(BASE.ART_BOARD_BOUNDS);
+        
+        // Add extra padding for smooth navigation
+        const padding = Math.max(paper.view.bounds.width, paper.view.bounds.height) * 0.5;
+        bounds = bounds.expand(padding);
+        
+        _workspaceBounds = bounds;
+        return;
+    }
+    
+    // Original logic for bounded mode
     let bounds = BASE.ART_BOARD_BOUNDS;
     if (!clipEmpty) {
         bounds = bounds.unite(paper.view.bounds);
@@ -59,7 +87,7 @@ const setWorkspaceBounds = clipEmpty => {
     for (const item of items) {
         bounds = bounds.unite(item.bounds.expand(BUFFER));
     }
-    // Limit to max workspace bounds
+    // Limit to max workspace bounds in bounded mode
     bounds = bounds.intersect(BASE.MAX_WORKSPACE_BOUNDS.expand(BUFFER));
     let top = bounds.top;
     let left = bounds.left;
@@ -84,6 +112,12 @@ const setWorkspaceBounds = clipEmpty => {
 };
 
 const clampViewBounds = () => {
+    // Skip view bounds clamping if infinite canvas is enabled
+    if (isInfiniteCanvasEnabled()) {
+        setWorkspaceBounds();
+        return;
+    }
+    
     const {left, right, top, bottom} = paper.project.view.bounds;
     if (left < _workspaceBounds.left) {
         paper.project.view.scrollBy(new paper.Point(_workspaceBounds.left - left, 0));
@@ -170,6 +204,15 @@ const getActionBounds = isBitmap => {
     if (isBitmap) {
         return BASE.ART_BOARD_BOUNDS;
     }
+    
+    if (isInfiniteCanvasEnabled()) {
+        // In infinite canvas mode, allow actions across a much larger area
+        // that expands dynamically based on current view and workspace bounds
+        const currentWorkspace = getWorkspaceBounds();
+        const expandedBounds = currentWorkspace.expand(Math.max(currentWorkspace.width, currentWorkspace.height));
+        return expandedBounds;
+    }
+    
     return paper.view.bounds.unite(BASE.ART_BOARD_BOUNDS).intersect(BASE.MAX_WORKSPACE_BOUNDS);
 };
 
@@ -213,6 +256,7 @@ export {
     OUTERMOST_ZOOM_LEVEL,
     clampViewBounds,
     getActionBounds,
+    isInfiniteCanvasEnabled,
     pan,
     resetZoom,
     setWorkspaceBounds,

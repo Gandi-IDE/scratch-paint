@@ -10,7 +10,7 @@ import {scaleWithStrokes} from '../helper/math';
 import {getSelectedLeafItems} from '../helper/selection';
 import {performSnapshot} from '../helper/undo';
 import {
-    BASE, setWorkspaceBounds
+    BASE, setWorkspaceBounds, isInfiniteCanvasEnabled
 } from '../helper/view';
 import Formats, {isBitmap, isVector} from '../lib/format';
 import Modes, {BitmapModes} from '../lib/modes';
@@ -152,8 +152,8 @@ const UpdateImageHOC = function (WrappedComponent) {
 
             showGuideLayers(guideLayers);
 
-            // Add back viewbox
-            if (workspaceMask) {
+            // Add back viewbox only in non-infinite canvas mode
+            if (workspaceMask && !isInfiniteCanvasEnabled()) {
                 paper.project.activeLayer.addChild(workspaceMask);
                 workspaceMask.clipMask = true;
             }

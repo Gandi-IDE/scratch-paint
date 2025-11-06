@@ -1,6 +1,6 @@
 import paper from '@scratch/paper';
 import {getItems} from '../selection';
-import {getActionBounds} from '../view';
+import {getActionBounds, isInfiniteCanvasEnabled} from '../view';
 import {BitmapModes} from '../../lib/modes';
 
 const MIN_SCALE_FACTOR = 0.0001;
@@ -77,8 +77,12 @@ class ScaleTool {
         if (!this.active) return;
         const point = event.point;
         const bounds = getActionBounds(this.isBitmap);
-        point.x = Math.max(bounds.left, Math.min(point.x, bounds.right));
-        point.y = Math.max(bounds.top, Math.min(point.y, bounds.bottom));
+        
+        // In infinite canvas mode, do not clamp the point to bounds
+        if (!isInfiniteCanvasEnabled()) {
+            point.x = Math.max(bounds.left, Math.min(point.x, bounds.right));
+            point.y = Math.max(bounds.top, Math.min(point.y, bounds.bottom));
+        }
 
         if (!this.lastPoint) this.lastPoint = event.lastPoint;
         const delta = point.subtract(this.lastPoint);

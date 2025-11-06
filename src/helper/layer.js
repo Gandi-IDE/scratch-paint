@@ -1,8 +1,8 @@
 import paper from '@scratch/paper';
-import {isBitmap, isVector} from '../lib/format';
+import { isBitmap, isVector } from '../lib/format';
 import log from '../log/log';
-import {isGroupItem} from './item';
-import {BASE} from './view';
+import { isGroupItem } from './item';
+import { BASE, isInfiniteCanvasEnabled } from './view';
 
 const CHECKERBOARD_SIZE = 8;
 const CROSSHAIR_SIZE = 16;
@@ -28,8 +28,26 @@ const _getPaintingLayer = function () {
  */
 const createCanvas = function (width, height) {
     const canvas = document.createElement('canvas');
-    canvas.width = width ? width : BASE.ART_BOARD_WIDTH;
-    canvas.height = height ? height : BASE.ART_BOARD_HEIGHT;
+    if (width && height) {
+        canvas.width = width;
+        canvas.height = height;
+    } else if (isInfiniteCanvasEnabled()) {
+        // In infinite canvas mode, create a larger default canvas
+        const viewBounds = paper.view ? paper.view.bounds : null;
+        if (viewBounds) {
+            // Create canvas based on current view bounds with some padding
+            const padding = Math.max(BASE.ART_BOARD_WIDTH, BASE.ART_BOARD_HEIGHT);
+            canvas.width = Math.max(BASE.ART_BOARD_WIDTH, viewBounds.width + padding * 2);
+            canvas.height = Math.max(BASE.ART_BOARD_HEIGHT, viewBounds.height + padding * 2);
+        } else {
+            // Fallback to larger default size
+            canvas.width = BASE.ART_BOARD_WIDTH * 4;
+            canvas.height = BASE.ART_BOARD_HEIGHT * 4;
+        }
+    } else {
+        canvas.width = BASE.ART_BOARD_WIDTH;
+        canvas.height = BASE.ART_BOARD_HEIGHT;
+    }
     canvas.getContext('2d').imageSmoothingEnabled = false;
     return canvas;
 };
@@ -204,25 +222,33 @@ const _makeBackgroundPaper = function (width, height, opacity) {
         pathPoints.push(new paper.Point(x, y));
         y--;
     }
-    const vRect = new paper.Shape.Rectangle(
-        new paper.Point(0, 0),
-        new paper.Point(BASE.ART_BOARD_WIDTH / CHECKERBOARD_SIZE, BASE.ART_BOARD_HEIGHT / CHECKERBOARD_SIZE));
+
+    const vRect = isInfiniteCanvasEnabled() ?
+        new paper.Shape.Rectangle(
+            new paper.Point(0, 0),
+            new paper.Point(width, height)) :
+        new paper.Shape.Rectangle(
+            new paper.Point(0, 0),
+            new paper.Point(BASE.ART_BOARD_WIDTH / CHECKERBOARD_SIZE, BASE.ART_BOARD_HEIGHT / CHECKERBOARD_SIZE));
     vRect.fillColor = BACKGROUND_LIGHT;
     vRect.guide = true;
     vRect.locked = true;
-    vRect.position = BASE.CENTER;
     const vPath = new paper.Path(pathPoints);
     vPath.fillRule = 'evenodd';
     vPath.fillColor = BACKGROUND_TILE_LIGHT;
     vPath.opacity = opacity;
     vPath.guide = true;
     vPath.locked = true;
-    vPath.position = BASE.CENTER;
-    const mask = new paper.Shape.Rectangle(BASE.MAX_WORKSPACE_BOUNDS);
-    mask.position = BASE.CENTER;
+    let mask = new paper.Shape.Rectangle(new paper.Point(0, 0), new paper.Point(width, height));
+    if (!isInfiniteCanvasEnabled()) {
+        vRect.position = BASE.CENTER;
+        vPath.position = BASE.CENTER;
+        mask = new paper.Shape.Rectangle(BASE.MAX_WORKSPACE_BOUNDS);
+        mask.position = BASE.CENTER;
+        mask.scale(1 / CHECKERBOARD_SIZE);
+    }
     mask.guide = true;
     mask.locked = true;
-    mask.scale(1 / CHECKERBOARD_SIZE);
     const vGroup = new paper.Group([vRect, vPath, mask]);
     mask.clipMask = true;
     return vGroup;
@@ -308,21 +334,58 @@ const _makeBackgroundGuideLayer = function (format) {
     const guideLayer = new paper.Layer();
     guideLayer.locked = true;
 
-    const vWorkspaceBounds = new paper.Shape.Rectangle(BASE.MAX_WORKSPACE_BOUNDS);
-    vWorkspaceBounds.fillColor = WORKSPACE_BOUNDS_LIGHT;
-    vWorkspaceBounds.position = BASE.CENTER;
+    const vectorBackground = new paper.Group();
 
-    // Add 1 to the height because it's an odd number otherwise, and we want it to be even
-    // so the corner of the checkerboard to line up with the center crosshair
+    // Only create workspace bounds in non-infinite canvas mode
+    if (!isInfiniteCanvasEnabled()) {
+        const vWorkspaceBounds = new paper.Shape.Rectangle(BASE.MAX_WORKSPACE_BOUNDS);
+        vWorkspaceBounds.fillColor = WORKSPACE_BOUNDS_LIGHT;
+        vWorkspaceBounds.position = BASE.CENTER;
+        vectorBackground.addChild(vWorkspaceBounds);
+    }
+
+    // Create dynamic background based on infinite canvas mode
+    let backgroundSize;
+    if (isInfiniteCanvasEnabled()) {
+        // For infinite canvas, create a much larger background that adapts to view
+        const viewBounds = paper.view ? paper.view.bounds : null;
+        if (viewBounds) {
+            const scale = Math.max(4, Math.ceil(Math.max(viewBounds.width, viewBounds.height) / BASE.ART_BOARD_WIDTH));
+            backgroundSize = {
+                width: BASE.ART_BOARD_WIDTH * scale / CHECKERBOARD_SIZE,
+                height: BASE.ART_BOARD_HEIGHT * scale / CHECKERBOARD_SIZE
+            };
+        } else {
+            console.log("No view bounds found");
+            backgroundSize = {
+                width: BASE.ART_BOARD_WIDTH * 8 / CHECKERBOARD_SIZE,
+                height: BASE.ART_BOARD_HEIGHT * 8 / CHECKERBOARD_SIZE
+            };
+        }
+    } else {
+        console.log("No workspace bounds found");
+        // Add 1 to the height because it's an odd number otherwise, and we want it to be even
+        // so the corner of the checkerboard to line up with the center crosshair
+        backgroundSize = {
+            width: BASE.MAX_WORKSPACE_BOUNDS.width / CHECKERBOARD_SIZE,
+            height: (BASE.MAX_WORKSPACE_BOUNDS.height / CHECKERBOARD_SIZE) + 1
+        };
+    }
+
     const vBackground = _makeBackgroundPaper(
-        BASE.MAX_WORKSPACE_BOUNDS.width / CHECKERBOARD_SIZE,
-        (BASE.MAX_WORKSPACE_BOUNDS.height / CHECKERBOARD_SIZE) + 1,
+        backgroundSize.width,
+        backgroundSize.height,
         0.55);
-    vBackground.position = BASE.CENTER;
+
+    if (isInfiniteCanvasEnabled()) {
+        const viewCenter = paper.view ? paper.view.center : BASE.CENTER;
+        vBackground.position = viewCenter;
+    } else {
+        vBackground.position = BASE.CENTER;
+    }
+
     vBackground.scaling = new paper.Point(CHECKERBOARD_SIZE, CHECKERBOARD_SIZE);
 
-    const vectorBackground = new paper.Group();
-    vectorBackground.addChild(vWorkspaceBounds);
     vectorBackground.addChild(vBackground);
     setGuideItem(vectorBackground);
     guideLayer.vectorBackground = vectorBackground;
@@ -354,9 +417,16 @@ const updateTheme = function (theme) {
     bitmapChildren[1].fillColor = isDark ? BACKGROUND_TILE_DARK : BACKGROUND_TILE_LIGHT;
 
     const vectorChildren = backgroundGuideLayer.vectorBackground.children;
-    vectorChildren[0].fillColor = isDark ? WORKSPACE_BOUNDS_DARK : WORKSPACE_BOUNDS_LIGHT;
-    vectorChildren[1].children[0].fillColor = isDark ? BACKGROUND_DARK : BACKGROUND_LIGHT;
-    vectorChildren[1].children[1].fillColor = isDark ? BACKGROUND_TILE_DARK : BACKGROUND_TILE_LIGHT;
+    // In infinite canvas mode, workspace bounds might not exist
+    if (!isInfiniteCanvasEnabled() && vectorChildren.length > 1) {
+        vectorChildren[0].fillColor = isDark ? WORKSPACE_BOUNDS_DARK : WORKSPACE_BOUNDS_LIGHT;
+        vectorChildren[1].children[0].fillColor = isDark ? BACKGROUND_DARK : BACKGROUND_LIGHT;
+        vectorChildren[1].children[1].fillColor = isDark ? BACKGROUND_TILE_DARK : BACKGROUND_TILE_LIGHT;
+    } else if (isInfiniteCanvasEnabled() && vectorChildren.length > 0) {
+        // In infinite canvas mode, the background is the first (and possibly only) child
+        vectorChildren[0].children[0].fillColor = isDark ? BACKGROUND_DARK : BACKGROUND_LIGHT;
+        vectorChildren[0].children[1].fillColor = isDark ? BACKGROUND_TILE_DARK : BACKGROUND_TILE_LIGHT;
+    }
 
     const outlineLayer = getOutlineLayer();
     outlineLayer.children[0].strokeColor = isDark ? OUTLINE_INNER_DARK : OUTLINE_INNER_LIGHT;
@@ -376,6 +446,38 @@ const setupLayers = function (format) {
     paintLayer.activate();
 };
 
+/**
+ * Rebuild the background guide layer with correct sizing for current canvas mode
+ * @param {string} format - The current image format
+ * @return {object} The new background guide layer
+ */
+const rebuildBackgroundGuideLayer = function (format) {
+    const oldLayer = getBackgroundGuideLayer();
+    const layerIndex = oldLayer ? paper.project.layers.indexOf(oldLayer) : 0;
+    
+    // Remove old background layer
+    if (oldLayer) {
+        oldLayer.remove();
+    }
+    
+    // Create new background layer with current mode settings
+    const newLayer = _makeBackgroundGuideLayer(format);
+    
+    // Insert at the same position (should be at the back)
+    if (layerIndex >= 0) {
+        paper.project.insertLayer(layerIndex, newLayer);
+    }
+    newLayer.sendToBack();
+    
+    // Ensure painting layer is active
+    const paintingLayer = _getPaintingLayer();
+    if (paintingLayer) {
+        paintingLayer.activate();
+    }
+    
+    return newLayer;
+};
+
 export {
     CROSSHAIR_SIZE,
     CROSSHAIR_FULL_OPACITY,
@@ -390,5 +492,6 @@ export {
     getRaster,
     setGuideItem,
     updateTheme,
-    setupLayers
+    setupLayers,
+    rebuildBackgroundGuideLayer
 };

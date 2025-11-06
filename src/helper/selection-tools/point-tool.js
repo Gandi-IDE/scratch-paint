@@ -1,5 +1,5 @@
 import {HANDLE_RATIO, snapDeltaToAngle} from '../math';
-import {getActionBounds} from '../view';
+import {getActionBounds, isInfiniteCanvasEnabled} from '../view';
 import {clearSelection, getSelectedLeafItems, getSelectedSegments} from '../selection';
 
 /** Subtool of ReshapeTool for moving control points. */
@@ -109,10 +109,12 @@ class PointTool {
         this.invertDeselect = false;
         this.deleteOnMouseUp = null;
 
-        const point = event.point;
+        let point = event.point;
         const bounds = getActionBounds();
-        point.x = Math.max(bounds.left, Math.min(point.x, bounds.right));
-        point.y = Math.max(bounds.top, Math.min(point.y, bounds.bottom));
+        if (!isInfiniteCanvasEnabled()) {
+            point.x = Math.max(bounds.left, Math.min(point.x, bounds.right));
+            point.y = Math.max(bounds.top, Math.min(point.y, bounds.bottom));
+        }
 
         if (!this.lastPoint) this.lastPoint = event.lastPoint;
         const dragVector = point.subtract(event.downPoint);

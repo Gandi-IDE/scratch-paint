@@ -1,7 +1,7 @@
 import paper from '@scratch/paper';
 import {forEachLinePoint, getBrushMark} from '../bitmap';
 import {createCanvas, getGuideLayer, getRaster} from '../layer';
-import {BASE} from '../view';
+import {BASE, isInfiniteCanvasEnabled} from '../view';
 
 /**
  * Tool for drawing lines with the bitmap brush.
@@ -91,7 +91,12 @@ class LineTool extends paper.Tool {
 
         // Clear
         const context = this.drawTarget.canvas.getContext('2d');
-        context.clearRect(0, 0, BASE.ART_BOARD_WIDTH, BASE.ART_BOARD_HEIGHT);
+        if (isInfiniteCanvasEnabled()) {
+            // In infinite canvas mode, clear the entire canvas
+            context.clearRect(0, 0, this.drawTarget.canvas.width, this.drawTarget.canvas.height);
+        } else {
+            context.clearRect(0, 0, BASE.ART_BOARD_WIDTH, BASE.ART_BOARD_HEIGHT);
+        }
 
         forEachLinePoint(this.startPoint, event.point, this.draw.bind(this));
     }

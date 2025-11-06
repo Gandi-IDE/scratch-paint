@@ -47,7 +47,7 @@ class Playground extends React.Component {
             rotationCenterY: 400,
             imageFormat: 'svg', // 'svg', 'png', or 'jpg'
             image: svgString, // svg string or data URI
-            imageId: this.id, // If this changes, the paint editor will reload
+            imageId: String(this.id), // If this changes, the paint editor will reload
             rtl: rtl,
         };
         this.reusableCanvas = document.createElement('canvas');
@@ -159,12 +159,15 @@ class Playground extends React.Component {
             that.setState({
                 image: content,
                 name: file.name.split('.').slice(0, -1).join('.'),
-                imageId: ++that.id,
+                imageId: String(++that.id),
                 imageFormat: type,
                 rotationCenterX: undefined,
                 rotationCenterY: undefined,
             });
        }
+    }
+    infiniteCanvasModeToggle() {
+        if(window) window.scratchPaintInfiniteCanvas = !window.scratchPaintInfiniteCanvas;
     }
     render () {
         return (
@@ -177,6 +180,7 @@ class Playground extends React.Component {
                 <button className={styles.playgroundButton}  onClick={this.uploadImage}>Upload</button>
                 <input id={styles.fileInput} type="file" name="name" onChange={this.onUploadImage} />
                 <button className={styles.playgroundButton} onClick={this.downloadImage}>Download</button>
+                <button className={styles.playgroundButton} onClick={this.infiniteCanvasModeToggle}>Infinite Canvas</button>
             </div>
         );
     }
